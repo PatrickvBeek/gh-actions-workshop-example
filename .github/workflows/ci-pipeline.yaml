@@ -33,7 +33,7 @@ jobs:
         with:
           path: 'dist/'
 
-  cd-pipline:
+  cd-pipeline:
     needs: ci-pipeline
     runs-on: ubuntu-latest
     permissions:
@@ -41,8 +41,45 @@ jobs:
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deploy-step.outputs.url_output }}
+      url: ${{ steps.deploy-step.outputs.page_url }}
     steps:
       - name: deploy the artefact
         id: deploy-step
         uses: actions/deploy-pages@v4
+    outputs:
+      deployment-url: ${{ steps.deploy-step.outputs.page_url }}
+
+  smoke-test:
+    needs: cd-pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    # <TODO: Execute the following steps with both firefox and chromium; use a matrix strategy>
+    strategy:
+      matrix:
+        browser: ['firefox', 'chromium']
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install ${{matrix.browser}} #<TODO: Install one of the specific browsers>
+
+      - name: Run Playwright tests
+        run: npx playwright test --project ${{matrix.browser}} # <TODO: Test with one of the specific browsers>
+        env:
+          PLAYWRIGHT_BASE_URL: ${{needs.cd-pipeline.outputs.deployment-url}} # <TODO: get the GitHub Pages url from the Deployment step of the previous job>
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{matrix.browser}} #<TODO: Upload the artefacts for the specific browser>
+          path: playwright-report/
+          retention-days: 1
